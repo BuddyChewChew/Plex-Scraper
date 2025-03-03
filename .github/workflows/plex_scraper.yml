@@ -30,12 +30,12 @@ jobs:
         run: |
           git config --global user.name "GitHub Action"
           git config --global user.email "action@github.com"
-          if ls *_*.m3u >/dev/null 2>&1; then
-            git add *_*.m3u
-            git commit -m "Update Plex M3U playlist with EPG - $(date +'%Y-%m-%d %H:%M:%S')"
+          if ls *_*.m3u *_*.xml >/dev/null 2>&1; then
+            git add *_*.m3u *_*.xml
+            git commit -m "Update Plex M3U and EPG - $(date +'%Y-%m-%d %H:%M:%S')"
             git push
           else
-            echo "No M3U files found to commit."
+            echo "No M3U or XML files found to commit."
           fi
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
