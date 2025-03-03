@@ -2,7 +2,7 @@
 import requests
 import json
 import gzip
-from datetime import datetime
+from datetime import datetime, UTC  # Updated for Python 3.13+
 
 # Configuration
 USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36"
@@ -24,7 +24,7 @@ def fetch_channels():
         print(f"Channels data downloaded: {response.status_code}")
         decompressed_data = gzip.decompress(response.content)
         channels_data = json.loads(decompressed_data.decode("utf-8"))
-        print(f"Channels data decompressed and parsed successfully")
+        print(f"Channels data decompressed and parsed successfully. Found {len(channels_data)} channels.")
         return channels_data
     except (requests.RequestException, json.JSONDecodeError, gzip.BadGzipFile) as e:
         print(f"Error fetching or processing channels data: {e}")
@@ -36,23 +36,26 @@ def generate_m3u(channels_data, filename):
         print("No channels data to generate M3U.")
         return None
 
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    timestamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
     output_filename = f"{filename}_{timestamp}.m3u"
     
+    channels_added = 0
     with open(output_filename, "w", encoding="utf-8") as f:
         f.write(f'#EXTM3U url-tvg="{EPG_FILE}"\n')
         
         for channel_id, channel_info in channels_data.items():
             name = channel_info.get("name", "Unknown Channel")
             url = channel_info.get("url", "")
+            print(f"Processing channel: {channel_id}, Name: {name}, URL: {url}")
             if not url:
+                print(f"Skipping {channel_id}: No URL provided.")
                 continue
             
-            # Use the channel_id from JSON as tvg-id
             f.write(f'#EXTINF:-1 tvg-id="{channel_id}" tvg-name="{name}",{name}\n')
             f.write(f"{url}\n")
+            channels_added += 1
     
-    print(f"Saved M3U playlist to {output_filename}")
+    print(f"Saved M3U playlist to {output_filename} with {channels_added} channels.")
     return output_filename
 
 def generate_basic_epg(channels_data, filename):
@@ -61,11 +64,11 @@ def generate_basic_epg(channels_data, filename):
         print("No channels data to generate EPG.")
         return None
 
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    timestamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
     output_filename = f"{filename}_{timestamp}.xml"
     
     # Static time range: today from 00:00 to 23:59 UTC
-    today = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+    today = datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
     start_time = today.strftime("%Y%m%d%H%M%S +0000")
     end_time = today.replace(hour=23, minute=59, second=59).strftime("%Y%m%d%H%M%S +0000")
     
@@ -76,11 +79,9 @@ def generate_basic_epg(channels_data, filename):
         
         for channel_id, channel_info in channels_data.items():
             name = channel_info.get("name", "Unknown Channel")
-            # Channel entry
             f.write(f'  <channel id="{channel_id}">\n')
             f.write(f'    <display-name>{name}</display-name>\n')
             f.write('  </channel>\n')
-            # Static program entry
             f.write(f'  <programme start="{start_time}" stop="{end_time}" channel="{channel_id}">\n')
             f.write(f'    <title>{name} Live</title>\n')
             f.write(f'    <desc>Live streaming content from {name}</desc>\n')
@@ -95,10 +96,7 @@ def main():
     """Main function to run the Plex scraper and generate M3U and EPG."""
     print("Starting Plex scraper...")
     
-    # Fetch channel data
     channels_data = fetch_channels()
-    
-    # Generate files
     if channels_data:
         m3u_file = generate_m3u(channels_data, "plex_channels")
         epg_file = generate_basic_epg(channels_data, "epg")
