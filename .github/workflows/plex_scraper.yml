@@ -28,8 +28,6 @@ jobs:
 
       # Run the scraper
       - name: Run Plex scraper
-        env:
-          PLEX_TOKEN: ${{ secrets.PLEX_TOKEN }}
         run: python plex_scraper.py
 
       # Commit and push results
@@ -39,7 +37,7 @@ jobs:
           git config --global user.email "action@github.com"
           if ls *_*.json >/dev/null 2>&1; then
             git add *_*.json
-            git commit -m "Update Plex scraper data - $(date +'%Y-%m-%d %H:%M:%S')"
+            git commit -m "Update Plex channels data - $(date +'%Y-%m-%d %H:%M:%S')"
             git push
           else
             echo "No JSON files found to commit."
