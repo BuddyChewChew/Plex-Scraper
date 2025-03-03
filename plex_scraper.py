@@ -7,8 +7,9 @@ from datetime import datetime
 # Configuration
 USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36"
 CHANNELS_URL = "https://i.mjh.nz/Plex/.channels.json.gz"
+EPG_URL = "http://example.com/epg.xml"  # Replace with a real EPG URL if available
 
-# Headers (no token needed)
+# Headers
 HEADERS = {
     "User-Agent": USER_AGENT,
     "Accept": "application/json"
@@ -22,7 +23,6 @@ def fetch_channels():
         response.raise_for_status()
         print(f"Channels data downloaded: {response.status_code}")
         
-        # Decompress the gzip content
         decompressed_data = gzip.decompress(response.content)
         channels_data = json.loads(decompressed_data.decode("utf-8"))
         print(f"Channels data decompressed and parsed successfully")
@@ -31,26 +31,18 @@ def fetch_channels():
         print(f"Error fetching or processing channels data: {e}")
         return None
 
-def save_data(data, filename):
-    """Save data to a JSON file with a timestamp."""
-    if data:
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        output_filename = f"{filename}_{timestamp}.json"
-        with open(output_filename, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=4)
-        print(f"Saved data to {output_filename}")
-    else:
-        print(f"No data to save for {filename}")
+def generate_m3u(channels_data, filename):
+    """Generate an M3U playlist file from the channels data."""
+    if not channels_data:
+        print("No channels data to generate M3U.")
+        return
 
-def main():
-    """Main function to run the Plex scraper."""
-    print("Starting Plex scraper...")
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    output_filename = f"{filename}_{timestamp}.m3u"
     
-    # Fetch and save channels data
-    channels_data = fetch_channels()
-    save_data(channels_data, "plex_channels")
-    
-    print("Plex scraping completed.")
-
-if __name__ == "__main__":
-    main()
+    with open(output_filename, "w", encoding="utf-8") as f:
+        f.write("#EXTM3U\n")  # M3U header
+        
+        # Add EPG URL if provided
+        if EPG_URL:
+            f.write(f'#EXTM3U url-t
