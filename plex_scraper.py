@@ -2,13 +2,12 @@
 import requests
 import json
 import gzip
-import xml.etree.ElementTree as ET
 from datetime import datetime
 
 # Configuration
 USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36"
 CHANNELS_URL = "https://github.com/matthuisman/i.mjh.nz/raw/refs/heads/master/Plex/.channels.json.gz"
-EPG_URL = "https://iptv-org.github.io/epg/guides/usa.xml"  # Public EPG for US channels
+EPG_FILE = "epg.xml"  # Local EPG file to be generated
 
 # Headers
 HEADERS = {
@@ -31,56 +30,17 @@ def fetch_channels():
         print(f"Error fetching or processing channels data: {e}")
         return None
 
-def fetch_epg():
-    """Fetch and parse the EPG XML."""
-    print(f"Fetching EPG data from {EPG_URL}")
-    try:
-        response = requests.get(EPG_URL, headers={"User-Agent": USER_AGENT}, timeout=10)
-        response.raise_for_status()
-        print(f"EPG data downloaded: {response.status_code}")
-        epg_tree = ET.fromstring(response.text)
-        
-        # Build a mapping of channel IDs to display names
-        epg_channels = {}
-        for channel in epg_tree.findall(".//channel"):
-            chan_id = channel.get("id")
-            display_name = channel.find("display-name").text if channel.find("display-name") is not None else chan_id
-            epg_channels[display_name.lower()] = chan_id
-        print(f"Parsed {len(epg_channels)} channels from EPG")
-        return epg_channels
-    except (requests.RequestException, ET.ParseError) as e:
-        print(f"Error fetching or parsing EPG data: {e}")
-        return {}
-
-def map_tvg_id(channel_name, epg_channels):
-    """Map Plex channel names to EPG tvg-ids."""
-    name_lower = channel_name.lower()
-    # Check if the channel name matches an EPG display name
-    if name_lower in epg_channels:
-        return epg_channels[name_lower]
-    # Heuristic mappings for common channels
-    if "abc" in name_lower:
-        return "ABC.us"
-    elif "cbs" in name_lower:
-        return "CBS.us"
-    elif "nbc" in name_lower:
-        return "NBC.us"
-    elif "fox" in name_lower:
-        return "FOX.us"
-    else:
-        return f"plex_{name_lower.replace(' ', '_')}"  # Fallback
-
-def generate_m3u(channels_data, epg_channels, filename):
+def generate_m3u(channels_data, filename):
     """Generate an M3U playlist file with EPG tags."""
     if not channels_data:
         print("No channels data to generate M3U.")
-        return
+        return None
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     output_filename = f"{filename}_{timestamp}.m3u"
     
     with open(output_filename, "w", encoding="utf-8") as f:
-        f.write(f'#EXTM3U url-tvg="{EPG_URL}"\n')
+        f.write(f'#EXTM3U url-tvg="{EPG_FILE}"\n')
         
         for channel_id, channel_info in channels_data.items():
             name = channel_info.get("name", "Unknown Channel")
@@ -88,22 +48,62 @@ def generate_m3u(channels_data, epg_channels, filename):
             if not url:
                 continue
             
-            tvg_id = map_tvg_id(name, epg_channels)
-            f.write(f'#EXTINF:-1 tvg-id="{tvg_id}" tvg-name="{name}",{name}\n')
+            # Use the channel_id from JSON as tvg-id
+            f.write(f'#EXTINF:-1 tvg-id="{channel_id}" tvg-name="{name}",{name}\n')
             f.write(f"{url}\n")
     
     print(f"Saved M3U playlist to {output_filename}")
+    return output_filename
+
+def generate_basic_epg(channels_data, filename):
+    """Generate a basic EPG XML file with static entries."""
+    if not channels_data:
+        print("No channels data to generate EPG.")
+        return None
+
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    output_filename = f"{filename}_{timestamp}.xml"
+    
+    # Static time range: today from 00:00 to 23:59 UTC
+    today = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+    start_time = today.strftime("%Y%m%d%H%M%S +0000")
+    end_time = today.replace(hour=23, minute=59, second=59).strftime("%Y%m%d%H%M%S +0000")
+    
+    with open(output_filename, "w", encoding="utf-8") as f:
+        f.write('<?xml version="1.0" encoding="UTF-8"?>\n')
+        f.write('<!DOCTYPE tv SYSTEM "xmltv.dtd">\n')
+        f.write('<tv>\n')
+        
+        for channel_id, channel_info in channels_data.items():
+            name = channel_info.get("name", "Unknown Channel")
+            # Channel entry
+            f.write(f'  <channel id="{channel_id}">\n')
+            f.write(f'    <display-name>{name}</display-name>\n')
+            f.write('  </channel>\n')
+            # Static program entry
+            f.write(f'  <programme start="{start_time}" stop="{end_time}" channel="{channel_id}">\n')
+            f.write(f'    <title>{name} Live</title>\n')
+            f.write(f'    <desc>Live streaming content from {name}</desc>\n')
+            f.write('  </programme>\n')
+        
+        f.write('</tv>\n')
+    
+    print(f"Saved basic EPG to {output_filename}")
+    return output_filename
 
 def main():
-    """Main function to run the Plex scraper and generate an M3U playlist with EPG."""
+    """Main function to run the Plex scraper and generate M3U and EPG."""
     print("Starting Plex scraper...")
     
-    # Fetch data
+    # Fetch channel data
     channels_data = fetch_channels()
-    epg_channels = fetch_epg()
     
-    # Generate M3U file
-    generate_m3u(channels_data, epg_channels, "plex_channels")
+    # Generate files
+    if channels_data:
+        m3u_file = generate_m3u(channels_data, "plex_channels")
+        epg_file = generate_basic_epg(channels_data, "epg")
+    else:
+        print("Failed to fetch channels, no files generated.")
     
     print("Plex scraping completed.")
 
