@@ -2,7 +2,7 @@
 import requests
 import json
 import gzip
-from datetime import datetime, UTC  # Updated for Python 3.13+
+from datetime import datetime, UTC
 
 # Configuration
 USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36"
@@ -24,8 +24,10 @@ def fetch_channels():
         print(f"Channels data downloaded: {response.status_code}")
         decompressed_data = gzip.decompress(response.content)
         channels_data = json.loads(decompressed_data.decode("utf-8"))
-        print(f"Channels data decompressed and parsed successfully. Found {len(channels_data)} channels.")
-        return channels_data
+        # Access the 'channels' key
+        channel_list = channels_data.get("channels", {})
+        print(f"Channels data decompressed and parsed successfully. Found {len(channel_list)} channels.")
+        return channel_list
     except (requests.RequestException, json.JSONDecodeError, gzip.BadGzipFile) as e:
         print(f"Error fetching or processing channels data: {e}")
         return None
@@ -67,7 +69,6 @@ def generate_basic_epg(channels_data, filename):
     timestamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
     output_filename = f"{filename}_{timestamp}.xml"
     
-    # Static time range: today from 00:00 to 23:59 UTC
     today = datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
     start_time = today.strftime("%Y%m%d%H%M%S +0000")
     end_time = today.replace(hour=23, minute=59, second=59).strftime("%Y%m%d%H%M%S +0000")
